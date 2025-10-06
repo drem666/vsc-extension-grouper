@@ -1,0 +1,54 @@
+body {
+    background-color: var(--vscode-editor-background);
+    color: var(--vscode-editor-foreground);
+    font-family: var(--vscode-font-family);
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+#top-panel {
+    padding: 8px;
+    background: var(--vscode-editorHoverWidget-background);
+    border-bottom: 1px solid var(--vscode-editorWidget-border);
+    text-align: center;
+}
+
+#middle-panel {
+    padding: 10px;
+    background: var(--vscode-sideBar-background);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+    border-bottom: 1px solid var(--vscode-editorWidget-border);
+}
+
+#bottom-panel {
+    padding: 10px;
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    overflow-y: auto;
+}
+
+.extension-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.extension-icon:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 5px var(--vscode-editorWidget-border);
+}
+
+.extension-icon.selected {
+    outline: 2px solid var(--vscode-editor-selectionBackground);
+}
