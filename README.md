@@ -1,24 +1,37 @@
-# Extension Grouper for VSCode
+# VSCode Extension Grouper
 
-A simple but powerful tool to **group, activate, deactivate, and back up your VSCode extensions**.
+Visual tool to create, activate, deactivate, and manage groups of VSCode extensions.
 
-## Features
-- Create named groups of extensions
-- Assign extensions via click selection
-- Activate/deactivate groups with one click
-- Backup group configuration to JSON
+## Running in Development
 
-## Usage
-1. Open Command Palette → “Open Extension Grouper”
-2. Use the GUI to manage groups
-3. Hover icons to view details in the top panel
-4. Backup creates `extensionGroups.json` for persistence
+1. Open this folder in VSCode.
+2. Run `npm install`.
+3. Press **F5** → launches the Extension Development Host.
+4. In the new window → `Ctrl+Shift+P` → “Open Extension Grouper”.
 
----
+## Building for Release
 
-**Tech stack:** TypeScript, VSCode Webview Toolkit, HTML, CSS  
-**Build:**  
-```bash
-npm install
 npm run compile
 vsce package
+
+
+This generates a `.vsix` bundle for distribution.
+
+## License
+
+MIT — free and open-source.
+
+🧩 .gitignore
+node_modules/
+out/
+*.vsix
+
+✅ Final Step — Test
+cd Y:\coder_tools\vsc-extension-grouper
+npm install
+npm run compile
+
+
+Then open in VSCode → F5 → Ctrl+Shift+P → Open Extension Grouper.
+
+You’ll see your 3-panel UI working, icons populating, hover info shown, and full extension list loaded.

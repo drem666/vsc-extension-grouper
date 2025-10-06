@@ -1,37 +1,31 @@
 {
   "name": "vsc-extension-grouper",
-  "displayName": "Extension Grouper",
-  "description": "Group, activate, deactivate, and backup your VSCode extensions with an elegant interface.",
+  "displayName": "VSCode Extension Grouper",
+  "description": "Group, view, and manage your installed VSCode extensions with ease.",
   "version": "1.0.0",
+  "publisher": "your-name",
   "engines": {
     "vscode": "^1.80.0"
   },
-  "categories": [
-    "Other"
-  ],
   "activationEvents": [
-    "onCommand:extensionGrouper.openPanel"
+    "onStartupFinished",
+    "onCommand:extension-grouper.open"
   ],
-  "main": "./dist/extension.js",
+  "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "extensionGrouper.openPanel",
+        "command": "extension-grouper.open",
         "title": "Open Extension Grouper"
       }
     ]
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "package": "vsce package",
-    "postinstall": "npm install --save-dev @types/node @types/vscode"
+    "compile": "npx tsc -p ./"
   },
   "devDependencies": {
-    "@types/node": "^24.7.0",
-    "@types/vscode": "^1.104.0",
-    "typescript": "^5.3.0",
-    "vsce": "^2.15.0"
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.0"
   }
 }
