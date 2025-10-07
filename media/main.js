@@ -120,16 +120,23 @@ window.addEventListener('message', event => {
         case 'updateGroups':
             console.log('Updating groups:', message.groups);
             populateGroups(message.groups);
+            // Refresh extensions to update group badges
+            vscode.postMessage({ command: 'getExtensions' });
             break;
     }
 });
 
 function renderExtensions(extensions) {
-    console.log('Rendering', extensions.length, 'extensions');
+    console.log('Rendering', extensions.length, 'extensions with group badges');
     const container = document.getElementById('bottom-panel');
     container.innerHTML = '';
     
     extensions.forEach(ext => {
+        // Create container for icon and badges
+        const iconContainer = document.createElement('div');
+        iconContainer.className = 'extension-icon-container';
+        iconContainer.dataset.id = ext.id;
+        
         const icon = document.createElement('img');
         icon.src = ext.icon;
         icon.className = 'extension-icon';
@@ -141,6 +148,22 @@ function renderExtensions(extensions) {
             this.src = 'https://code.visualstudio.com/assets/favicon.ico';
         };
         
+        // Add group badges if extension has groups
+        if (ext.groups && ext.groups.length > 0) {
+            const badgeContainer = document.createElement('div');
+            badgeContainer.className = 'group-badges';
+            
+            ext.groups.forEach(groupName => {
+                const badge = document.createElement('span');
+                badge.className = 'group-badge';
+                badge.textContent = groupName;
+                badge.title = `Part of group: ${groupName}`;
+                badgeContainer.appendChild(badge);
+            });
+            
+            iconContainer.appendChild(badgeContainer);
+        }
+        
         // Hover to show details
         icon.addEventListener('mouseenter', () => {
             document.getElementById('top-panel').textContent = `${ext.displayName} — ${ext.description}`;
@@ -150,36 +173,39 @@ function renderExtensions(extensions) {
             document.getElementById('top-panel').textContent = 'Hover over an extension icon to see its details';
         });
         
-        // Click to select (Ctrl for multi-select)
+        // Click behavior: Ctrl+Click for selection, normal click to toggle extension
         icon.addEventListener('click', (e) => {
             if (e.ctrlKey || e.metaKey) {
-                toggleSelect(ext.id, icon);
+                // Ctrl+Click: Select for grouping
+                e.preventDefault();
+                toggleSelect(ext.id, iconContainer);
             } else {
-                clearSelections();
-                toggleSelect(ext.id, icon);
+                // Normal click: Toggle extension enable/disable
+                vscode.postMessage({ command: 'toggleExtension', id: ext.id });
             }
         });
         
-        container.appendChild(icon);
+        iconContainer.appendChild(icon);
+        container.appendChild(iconContainer);
     });
 }
 
-function toggleSelect(id, icon) {
+function toggleSelect(id, container) {
     const idx = selectedExtensions.indexOf(id);
     if (idx > -1) {
         selectedExtensions.splice(idx, 1);
-        icon.classList.remove('selected');
+        container.classList.remove('selected');
     } else {
         selectedExtensions.push(id);
-        icon.classList.add('selected');
+        container.classList.add('selected');
     }
     console.log('Selected extensions:', selectedExtensions);
 }
 
 function clearSelections() {
     selectedExtensions = [];
-    document.querySelectorAll('.extension-icon.selected').forEach(icon => {
-        icon.classList.remove('selected');
+    document.querySelectorAll('.extension-icon-container.selected').forEach(container => {
+        container.classList.remove('selected');
     });
 }
 

@@ -151,6 +151,11 @@ function activate(context) {
                                 if (addedCount > 0) {
                                     saveGroups();
                                     vscode.window.showInformationMessage(`Assigned ${addedCount} extensions to ${message.name}`);
+                                    // Update the webview with new groups data
+                                    currentPanel.webview.postMessage({
+                                        command: "updateGroups",
+                                        groups: groups
+                                    });
                                 }
                             }
                         }
@@ -165,18 +170,28 @@ function activate(context) {
                                 if (removedCount > 0) {
                                     saveGroups();
                                     vscode.window.showInformationMessage(`Removed ${removedCount} extensions from ${message.name}`);
+                                    // Update the webview with new groups data
+                                    currentPanel.webview.postMessage({
+                                        command: "updateGroups",
+                                        groups: groups
+                                    });
                                 }
                             }
                         }
                         break;
                     case "activateGroup":
                         if (message.name) {
-                            await toggleGroup(message.name, true);
+                            await activateGroup(message.name);
                         }
                         break;
                     case "deactivateGroup":
                         if (message.name) {
-                            await toggleGroup(message.name, false);
+                            await deactivateGroup(message.name);
+                        }
+                        break;
+                    case "toggleExtension":
+                        if (message.id) {
+                            await toggleExtension(message.id);
                         }
                         break;
                     case "backupGroup":
@@ -196,7 +211,7 @@ function activate(context) {
     });
     context.subscriptions.push(disposable);
 }
-// Helper functions (same as before but ensuring they work)
+// Helper functions
 function ensureStorageDir(dir) {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
@@ -257,12 +272,17 @@ function collectExtensions(panel, context) {
                 console.log(`Could not load icon for ${ext.id}:`, error);
             }
         }
+        // Find which groups this extension belongs to
+        const extensionGroups = groups
+            .filter(group => group.extensions.includes(ext.id))
+            .map(group => group.name);
         return {
             id: ext.id,
             displayName: ext.packageJSON.displayName || ext.id,
             description: ext.packageJSON.description || "No description available",
             icon: iconUri,
-            active: !disabledIds.includes(ext.id)
+            active: !disabledIds.includes(ext.id),
+            groups: extensionGroups
         };
     });
 }
@@ -276,7 +296,7 @@ function getDisabledExtensions() {
         return [];
     }
 }
-async function toggleGroup(groupName, enable) {
+async function activateGroup(groupName) {
     const group = groups.find(g => g.name === groupName);
     if (!group) {
         vscode.window.showErrorMessage(`Group "${groupName}" not found`);
@@ -284,21 +304,66 @@ async function toggleGroup(groupName, enable) {
     }
     try {
         for (const extensionId of group.extensions) {
-            if (enable) {
+            try {
                 await vscode.commands.executeCommand('workbench.extensions.enableExtension', extensionId);
             }
-            else {
-                await vscode.commands.executeCommand('workbench.extensions.disableExtension', extensionId);
+            catch (error) {
+                console.error(`Failed to enable extension ${extensionId}:`, error);
             }
         }
-        vscode.window.showInformationMessage(`${enable ? "Activated" : "Deactivated"} group "${groupName}"`, "Reload Window").then(selection => {
+        vscode.window.showInformationMessage(`Activated group "${groupName}"`, "Reload Window").then(selection => {
             if (selection === "Reload Window") {
                 vscode.commands.executeCommand("workbench.action.reloadWindow");
             }
         });
     }
     catch (error) {
-        vscode.window.showErrorMessage(`Failed to toggle group: ${error}`);
+        console.error("Error in activateGroup:", error);
+        vscode.window.showErrorMessage(`Failed to activate group: ${error}`);
+    }
+}
+async function deactivateGroup(groupName) {
+    const group = groups.find(g => g.name === groupName);
+    if (!group) {
+        vscode.window.showErrorMessage(`Group "${groupName}" not found`);
+        return;
+    }
+    try {
+        for (const extensionId of group.extensions) {
+            try {
+                await vscode.commands.executeCommand('workbench.extensions.disableExtension', extensionId);
+            }
+            catch (error) {
+                console.error(`Failed to disable extension ${extensionId}:`, error);
+            }
+        }
+        vscode.window.showInformationMessage(`Deactivated group "${groupName}"`, "Reload Window").then(selection => {
+            if (selection === "Reload Window") {
+                vscode.commands.executeCommand("workbench.action.reloadWindow");
+            }
+        });
+    }
+    catch (error) {
+        console.error("Error in deactivateGroup:", error);
+        vscode.window.showErrorMessage(`Failed to deactivate group: ${error}`);
+    }
+}
+async function toggleExtension(extensionId) {
+    try {
+        const disabledIds = getDisabledExtensions();
+        const isDisabled = disabledIds.includes(extensionId);
+        if (isDisabled) {
+            await vscode.commands.executeCommand('workbench.extensions.enableExtension', extensionId);
+            vscode.window.showInformationMessage(`Enabled extension`);
+        }
+        else {
+            await vscode.commands.executeCommand('workbench.extensions.disableExtension', extensionId);
+            vscode.window.showInformationMessage(`Disabled extension`);
+        }
+    }
+    catch (error) {
+        console.error(`Failed to toggle extension ${extensionId}:`, error);
+        vscode.window.showErrorMessage(`Failed to toggle extension: ${error}`);
     }
 }
 function deactivate() { }
