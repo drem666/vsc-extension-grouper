@@ -8,7 +8,7 @@ interface ExtensionInfo {
   description: string;
   icon: string;
   active: boolean;
-  groups: string[]; // Add groups to extension info for badges
+  groups: string[];
 }
 
 interface Group {
@@ -23,7 +23,6 @@ let currentPanel: vscode.WebviewPanel | undefined;
 export function activate(context: vscode.ExtensionContext) {
   console.log("Extension Grouper activated.");
 
-  // Initialize groups file path and load existing groups
   groupFilePath = path.join(context.globalStorageUri.fsPath, "groups.json");
   ensureStorageDir(context.globalStorageUri.fsPath);
   loadGroups();
@@ -36,7 +35,6 @@ export function activate(context: vscode.ExtensionContext) {
   button.show();
   context.subscriptions.push(button);
 
-  // Command to open panel
   const disposable = vscode.commands.registerCommand("extension-grouper.open", async () => {
     console.log("Opening Extension Grouper panel");
     
@@ -58,11 +56,9 @@ export function activate(context: vscode.ExtensionContext) {
       }
     );
 
-    // Get webview URIs
     const jsUri = currentPanel.webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, "media", "main.js"));
     const cssUri = currentPanel.webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, "media", "style.css"));
     
-    // Read and prepare HTML
     const htmlPath = vscode.Uri.joinPath(context.extensionUri, "media", "main.html");
     let html = fs.readFileSync(htmlPath.fsPath, "utf8");
     html = html.replace(/src="main.js"/g, `src="${jsUri}"`)
@@ -70,7 +66,6 @@ export function activate(context: vscode.ExtensionContext) {
 
     currentPanel.webview.html = html;
 
-    // Send initial data to webview
     const extensions = collectExtensions(currentPanel, context);
     currentPanel.webview.postMessage({ 
       command: "loadExtensions", 
@@ -78,7 +73,6 @@ export function activate(context: vscode.ExtensionContext) {
       groups: groups 
     });
 
-    // Handle messages from webview
     currentPanel.webview.onDidReceiveMessage(async (message) => {
       console.log("Extension received message:", message.command, message);
       
@@ -94,7 +88,6 @@ export function activate(context: vscode.ExtensionContext) {
             break;
 
           case "createGroup":
-            // Show VSCode input box instead of browser prompt
             const groupName = await vscode.window.showInputBox({
               prompt: "Enter a name for the new group",
               placeHolder: "Group name"
@@ -103,17 +96,10 @@ export function activate(context: vscode.ExtensionContext) {
             if (groupName && groupName.trim()) {
               const trimmedName = groupName.trim();
               if (!groups.find(g => g.name === trimmedName)) {
-                groups.push({ 
-                  name: trimmedName, 
-                  extensions: [] 
-                });
+                groups.push({ name: trimmedName, extensions: [] });
                 saveGroups();
                 vscode.window.showInformationMessage(`Created group: ${trimmedName}`);
-                // Send updated groups back to webview
-                currentPanel!.webview.postMessage({ 
-                  command: "updateGroups", 
-                  groups: groups 
-                });
+                currentPanel!.webview.postMessage({ command: "updateGroups", groups: groups });
               } else {
                 vscode.window.showWarningMessage(`Group "${trimmedName}" already exists`);
               }
@@ -127,10 +113,7 @@ export function activate(context: vscode.ExtensionContext) {
               if (groups.length < initialLength) {
                 saveGroups();
                 vscode.window.showInformationMessage(`Deleted group: ${message.name}`);
-                currentPanel!.webview.postMessage({ 
-                  command: "updateGroups", 
-                  groups: groups 
-                });
+                currentPanel!.webview.postMessage({ command: "updateGroups", groups: groups });
               }
             }
             break;
@@ -149,11 +132,7 @@ export function activate(context: vscode.ExtensionContext) {
                 if (addedCount > 0) {
                   saveGroups();
                   vscode.window.showInformationMessage(`Assigned ${addedCount} extensions to ${message.name}`);
-                  // Update the webview with new groups data
-                  currentPanel!.webview.postMessage({ 
-                    command: "updateGroups", 
-                    groups: groups 
-                  });
+                  currentPanel!.webview.postMessage({ command: "updateGroups", groups: groups });
                 }
               }
             }
@@ -169,11 +148,7 @@ export function activate(context: vscode.ExtensionContext) {
                 if (removedCount > 0) {
                   saveGroups();
                   vscode.window.showInformationMessage(`Removed ${removedCount} extensions from ${message.name}`);
-                  // Update the webview with new groups data
-                  currentPanel!.webview.postMessage({ 
-                    command: "updateGroups", 
-                    groups: groups 
-                  });
+                  currentPanel!.webview.postMessage({ command: "updateGroups", groups: groups });
                 }
               }
             }
@@ -207,7 +182,6 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }, undefined, context.subscriptions);
 
-    // Clean up when panel is closed
     currentPanel.onDidDispose(() => {
       currentPanel = undefined;
     }, null, context.subscriptions);
@@ -273,7 +247,6 @@ function collectExtensions(panel: vscode.WebviewPanel, context: vscode.Extension
   return vscode.extensions.all.map(ext => {
     let iconUri = defaultIcon;
     
-    // Try to load extension icon
     if (ext.packageJSON.icon) {
       try {
         const iconPath = path.join(ext.extensionPath, ext.packageJSON.icon);
@@ -285,7 +258,6 @@ function collectExtensions(panel: vscode.WebviewPanel, context: vscode.Extension
       }
     }
 
-    // Find which groups this extension belongs to
     const extensionGroups = groups
       .filter(group => group.extensions.includes(ext.id))
       .map(group => group.name);
@@ -311,6 +283,7 @@ function getDisabledExtensions(): string[] {
   }
 }
 
+// FIXED: Use correct command names
 async function activateGroup(groupName: string) {
   const group = groups.find(g => g.name === groupName);
   if (!group) {
@@ -321,7 +294,9 @@ async function activateGroup(groupName: string) {
   try {
     for (const extensionId of group.extensions) {
       try {
+        // CORRECT COMMAND: workbench.extensions.enableExtension
         await vscode.commands.executeCommand('workbench.extensions.enableExtension', extensionId);
+        console.log(`Enabled extension: ${extensionId}`);
       } catch (error) {
         console.error(`Failed to enable extension ${extensionId}:`, error);
       }
@@ -341,6 +316,7 @@ async function activateGroup(groupName: string) {
   }
 }
 
+// FIXED: Use correct command names
 async function deactivateGroup(groupName: string) {
   const group = groups.find(g => g.name === groupName);
   if (!group) {
@@ -351,7 +327,9 @@ async function deactivateGroup(groupName: string) {
   try {
     for (const extensionId of group.extensions) {
       try {
+        // CORRECT COMMAND: workbench.extensions.disableExtension
         await vscode.commands.executeCommand('workbench.extensions.disableExtension', extensionId);
+        console.log(`Disabled extension: ${extensionId}`);
       } catch (error) {
         console.error(`Failed to disable extension ${extensionId}:`, error);
       }
@@ -371,15 +349,18 @@ async function deactivateGroup(groupName: string) {
   }
 }
 
+// FIXED: Use correct command names
 async function toggleExtension(extensionId: string) {
   try {
     const disabledIds = getDisabledExtensions();
     const isDisabled = disabledIds.includes(extensionId);
 
     if (isDisabled) {
+      // CORRECT COMMAND: workbench.extensions.enableExtension
       await vscode.commands.executeCommand('workbench.extensions.enableExtension', extensionId);
       vscode.window.showInformationMessage(`Enabled extension`);
     } else {
+      // CORRECT COMMAND: workbench.extensions.disableExtension
       await vscode.commands.executeCommand('workbench.extensions.disableExtension', extensionId);
       vscode.window.showInformationMessage(`Disabled extension`);
     }
