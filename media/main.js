@@ -1,101 +1,177 @@
 const vscode = acquireVsCodeApi();
+
+// State
 let currentGroups = [];
 let selectedExtensions = [];
 
-// Wait for DOM to be fully loaded before attaching event listeners
+// Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
-    initializeEventListeners();
-    
-    // Request initial data
-    vscode.postMessage({ command: 'getExtensions' });
+    console.log('Extension Grouper UI loaded');
+    initializeUI();
 });
 
-function initializeEventListeners() {
-    // Debug: Check if elements exist
-    console.log('createGroup element:', document.getElementById('createGroup'));
-    console.log('deleteGroup element:', document.getElementById('deleteGroup'));
-    console.log('groupList element:', document.getElementById('groupList'));
+function initializeUI() {
+    console.log('Initializing UI components');
     
-    // Button event listeners
-    document.getElementById('createGroup').addEventListener('click', () => {
-        console.log('Create Group clicked');
-        const name = prompt('Enter group name:');
-        if (name) {
-            vscode.postMessage({ command: 'createGroup', name });
+    // Initialize button event listeners
+    initializeButtonListeners();
+    
+    // Request initial data from extension
+    vscode.postMessage({ command: 'getExtensions' });
+    
+    // Log that we're ready
+    console.log('UI initialized, waiting for extension data...');
+}
+
+function initializeButtonListeners() {
+    console.log('Setting up button listeners');
+    
+    // Create Group
+    const createBtn = document.getElementById('createGroup');
+    if (createBtn) {
+        createBtn.addEventListener('click', handleCreateGroup);
+        console.log('Create Group button listener attached');
+    } else {
+        console.error('Create Group button not found!');
+    }
+    
+    // Delete Group
+    const deleteBtn = document.getElementById('deleteGroup');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', handleDeleteGroup);
+    }
+    
+    // Assign to Group
+    const assignBtn = document.getElementById('assignGroup');
+    if (assignBtn) {
+        assignBtn.addEventListener('click', handleAssignGroup);
+    }
+    
+    // Deassign from Group
+    const deassignBtn = document.getElementById('deassignGroup');
+    if (deassignBtn) {
+        deassignBtn.addEventListener('click', handleDeassignGroup);
+    }
+    
+    // Activate Group
+    const activateBtn = document.getElementById('activateGroup');
+    if (activateBtn) {
+        activateBtn.addEventListener('click', handleActivateGroup);
+    }
+    
+    // Deactivate Group
+    const deactivateBtn = document.getElementById('deactivateGroup');
+    if (deactivateBtn) {
+        deactivateBtn.addEventListener('click', handleDeactivateGroup);
+    }
+    
+    // Backup Group
+    const backupBtn = document.getElementById('backupGroup');
+    if (backupBtn) {
+        backupBtn.addEventListener('click', handleBackupGroup);
+    }
+}
+
+// Button handlers
+function handleCreateGroup() {
+    console.log('Create Group button clicked');
+    const groupName = prompt('Enter a name for the new group:');
+    console.log('User entered:', groupName);
+    
+    if (groupName && groupName.trim()) {
+        console.log('Sending createGroup message:', groupName.trim());
+        vscode.postMessage({ 
+            command: 'createGroup', 
+            name: groupName.trim() 
+        });
+    } else if (groupName !== null) {
+        alert('Please enter a valid group name');
+    }
+}
+
+function handleDeleteGroup() {
+    const groupName = document.getElementById('groupList').value;
+    if (groupName) {
+        if (confirm(`Delete group "${groupName}"?`)) {
+            vscode.postMessage({ command: 'deleteGroup', name: groupName });
         }
-    });
-    
-    document.getElementById('deleteGroup').addEventListener('click', () => {
-        console.log('Delete Group clicked');
-        const name = document.getElementById('groupList').value;
-        if (name) {
-            vscode.postMessage({ command: 'deleteGroup', name });
-        } else {
-            alert('Please select a group first');
-        }
-    });
-    
-    document.getElementById('assignGroup').addEventListener('click', () => {
-        console.log('Assign Group clicked');
-        const name = document.getElementById('groupList').value;
-        if (name && selectedExtensions.length > 0) {
-            vscode.postMessage({ command: 'assignGroup', name, selected: selectedExtensions });
-        } else {
-            alert('Please select a group and at least one extension');
-        }
-    });
-    
-    document.getElementById('deassignGroup').addEventListener('click', () => {
-        console.log('Deassign Group clicked');
-        const name = document.getElementById('groupList').value;
-        if (name && selectedExtensions.length > 0) {
-            vscode.postMessage({ command: 'deassignGroup', name, selected: selectedExtensions });
-        } else {
-            alert('Please select a group and at least one extension');
-        }
-    });
-    
-    document.getElementById('activateGroup').addEventListener('click', () => {
-        console.log('Activate Group clicked');
-        const name = document.getElementById('groupList').value;
-        if (name) {
-            vscode.postMessage({ command: 'activateGroup', name });
-        } else {
-            alert('Please select a group first');
-        }
-    });
-    
-    document.getElementById('deactivateGroup').addEventListener('click', () => {
-        console.log('Deactivate Group clicked');
-        const name = document.getElementById('groupList').value;
-        if (name) {
-            vscode.postMessage({ command: 'deactivateGroup', name });
-        } else {
-            alert('Please select a group first');
-        }
-    });
-    
-    document.getElementById('backupGroup').addEventListener('click', () => {
-        console.log('Backup Group clicked');
-        vscode.postMessage({ command: 'backupGroup' });
-    });
+    } else {
+        alert('Please select a group first');
+    }
+}
+
+function handleAssignGroup() {
+    const groupName = document.getElementById('groupList').value;
+    if (groupName && selectedExtensions.length > 0) {
+        vscode.postMessage({ 
+            command: 'assignGroup', 
+            name: groupName, 
+            selected: selectedExtensions 
+        });
+        clearSelections();
+    } else {
+        alert('Please select a group and at least one extension');
+    }
+}
+
+function handleDeassignGroup() {
+    const groupName = document.getElementById('groupList').value;
+    if (groupName && selectedExtensions.length > 0) {
+        vscode.postMessage({ 
+            command: 'deassignGroup', 
+            name: groupName, 
+            selected: selectedExtensions 
+        });
+        clearSelections();
+    } else {
+        alert('Please select a group and at least one extension');
+    }
+}
+
+function handleActivateGroup() {
+    const groupName = document.getElementById('groupList').value;
+    if (groupName) {
+        vscode.postMessage({ command: 'activateGroup', name: groupName });
+    } else {
+        alert('Please select a group first');
+    }
+}
+
+function handleDeactivateGroup() {
+    const groupName = document.getElementById('groupList').value;
+    if (groupName) {
+        vscode.postMessage({ command: 'deactivateGroup', name: groupName });
+    } else {
+        alert('Please select a group first');
+    }
+}
+
+function handleBackupGroup() {
+    vscode.postMessage({ command: 'backupGroup' });
 }
 
 // Message handler from extension
 window.addEventListener('message', event => {
-    const { command, data, groups } = event.data;
-    console.log('Webview received message:', command);
+    const message = event.data;
+    console.log('Webview received message:', message.command, message);
     
-    if (command === 'loadExtensions') {
-        renderExtensions(data);
-        populateGroups(groups);
-    }
-    if (command === 'updateGroups') {
-        populateGroups(groups);
+    switch (message.command) {
+        case 'loadExtensions':
+            console.log('Loading extensions:', message.data.length);
+            console.log('Loading groups:', message.groups);
+            renderExtensions(message.data);
+            populateGroups(message.groups);
+            break;
+            
+        case 'updateGroups':
+            console.log('Updating groups:', message.groups);
+            populateGroups(message.groups);
+            break;
     }
 });
 
 function renderExtensions(extensions) {
+    console.log('Rendering', extensions.length, 'extensions');
     const container = document.getElementById('bottom-panel');
     container.innerHTML = '';
     
@@ -106,12 +182,13 @@ function renderExtensions(extensions) {
         icon.alt = ext.displayName;
         icon.title = `${ext.displayName}\n${ext.description}`;
         
-        // Handle image loading errors
+        // Handle broken images
         icon.onerror = function() {
+            console.log('Image failed to load for:', ext.displayName);
             this.src = 'https://code.visualstudio.com/assets/favicon.ico';
         };
         
-        // Hover events
+        // Hover to show details
         icon.addEventListener('mouseenter', () => {
             document.getElementById('top-panel').textContent = `${ext.displayName} — ${ext.description}`;
         });
@@ -120,13 +197,11 @@ function renderExtensions(extensions) {
             document.getElementById('top-panel').textContent = 'Hover over an extension icon to see its details';
         });
         
-        // Click to select for grouping
+        // Click to select (Ctrl for multi-select)
         icon.addEventListener('click', (e) => {
-            // Use Ctrl/Cmd for multi-select
             if (e.ctrlKey || e.metaKey) {
                 toggleSelect(ext.id, icon);
             } else {
-                // Single click - clear others and select this one
                 clearSelections();
                 toggleSelect(ext.id, icon);
             }
@@ -156,21 +231,24 @@ function clearSelections() {
 }
 
 function populateGroups(groups) {
+    console.log('Populating groups dropdown with:', groups);
     currentGroups = groups;
-    const ddl = document.getElementById('groupList');
-    const currentValue = ddl.value; // Remember current selection
+    const dropdown = document.getElementById('groupList');
+    const currentSelection = dropdown.value;
     
-    ddl.innerHTML = '<option value="">Select a group</option>';
+    dropdown.innerHTML = '<option value="">Select a group</option>';
     
-    groups.forEach(g => {
-        const opt = document.createElement('option');
-        opt.textContent = `${g.name} (${g.extensions.length} extensions)`;
-        opt.value = g.name;
-        ddl.appendChild(opt);
+    groups.forEach(group => {
+        const option = document.createElement('option');
+        option.value = group.name;
+        option.textContent = `${group.name} (${group.extensions.length} extensions)`;
+        dropdown.appendChild(option);
     });
     
-    // Restore selection if it still exists
-    if (currentValue && groups.find(g => g.name === currentValue)) {
-        ddl.value = currentValue;
+    // Restore previous selection if it still exists
+    if (currentSelection && groups.find(g => g.name === currentSelection)) {
+        dropdown.value = currentSelection;
     }
+    
+    console.log('Groups dropdown updated');
 }
