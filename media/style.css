@@ -14,6 +14,7 @@ body {
     background: var(--vscode-editorHoverWidget-background);
     border-bottom: 1px solid var(--vscode-editorWidget-border);
     text-align: center;
+    min-height: 20px;
 }
 
 #middle-panel {
@@ -42,6 +43,7 @@ body {
     border-radius: 8px;
     cursor: pointer;
     transition: transform 0.2s, box-shadow 0.2s;
+    border: 2px solid transparent;
 }
 
 .extension-icon:hover {
@@ -50,5 +52,27 @@ body {
 }
 
 .extension-icon.selected {
-    outline: 2px solid var(--vscode-editor-selectionBackground);
+    border-color: var(--vscode-button-background);
+    box-shadow: 0 0 8px var(--vscode-button-background);
+}
+
+button {
+    background-color: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: none;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-radius: 2px;
+}
+
+button:hover {
+    background-color: var(--vscode-button-hoverBackground);
+}
+
+select {
+    background-color: var(--vscode-dropdown-background);
+    color: var(--vscode-dropdown-foreground);
+    border: 1px solid var(--vscode-dropdown-border);
+    padding: 6px;
+    min-width: 150px;
 }
