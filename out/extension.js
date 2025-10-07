@@ -40,6 +40,7 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 let groups = [];
 let groupFilePath;
+let currentPanel;
 function activate(context) {
     console.log("Extension Grouper activated.");
     // Initialize groups file path and load existing groups
@@ -56,7 +57,11 @@ function activate(context) {
     // Command to open panel
     const disposable = vscode.commands.registerCommand("extension-grouper.open", async () => {
         console.log("Opening Extension Grouper panel");
-        const panel = vscode.window.createWebviewPanel("extensionGrouper", "Extension Grouper", vscode.ViewColumn.One, {
+        if (currentPanel) {
+            currentPanel.reveal(vscode.ViewColumn.One);
+            return;
+        }
+        currentPanel = vscode.window.createWebviewPanel("extensionGrouper", "Extension Grouper", vscode.ViewColumn.One, {
             enableScripts: true,
             retainContextWhenHidden: true,
             localResourceRoots: [
@@ -64,52 +69,57 @@ function activate(context) {
             ]
         });
         // Get webview URIs
-        const jsUri = panel.webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, "media", "main.js"));
-        const cssUri = panel.webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, "media", "style.css"));
+        const jsUri = currentPanel.webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, "media", "main.js"));
+        const cssUri = currentPanel.webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, "media", "style.css"));
         // Read and prepare HTML
         const htmlPath = vscode.Uri.joinPath(context.extensionUri, "media", "main.html");
         let html = fs.readFileSync(htmlPath.fsPath, "utf8");
         html = html.replace(/src="main.js"/g, `src="${jsUri}"`)
             .replace(/href="style.css"/g, `href="${cssUri}"`);
-        panel.webview.html = html;
+        currentPanel.webview.html = html;
         // Send initial data to webview
-        const extensions = collectExtensions(panel, context);
-        panel.webview.postMessage({
+        const extensions = collectExtensions(currentPanel, context);
+        currentPanel.webview.postMessage({
             command: "loadExtensions",
             data: extensions,
             groups: groups
         });
         // Handle messages from webview
-        panel.webview.onDidReceiveMessage(async (message) => {
+        currentPanel.webview.onDidReceiveMessage(async (message) => {
             console.log("Extension received message:", message.command, message);
             try {
                 switch (message.command) {
                     case "getExtensions":
-                        const updatedExtensions = collectExtensions(panel, context);
-                        panel.webview.postMessage({
+                        const updatedExtensions = collectExtensions(currentPanel, context);
+                        currentPanel.webview.postMessage({
                             command: "loadExtensions",
                             data: updatedExtensions,
                             groups: groups
                         });
                         break;
                     case "createGroup":
-                        if (message.name && message.name.trim()) {
-                            const groupName = message.name.trim();
-                            if (!groups.find(g => g.name === groupName)) {
+                        // Show VSCode input box instead of browser prompt
+                        const groupName = await vscode.window.showInputBox({
+                            prompt: "Enter a name for the new group",
+                            placeHolder: "Group name"
+                        });
+                        if (groupName && groupName.trim()) {
+                            const trimmedName = groupName.trim();
+                            if (!groups.find(g => g.name === trimmedName)) {
                                 groups.push({
-                                    name: groupName,
+                                    name: trimmedName,
                                     extensions: []
                                 });
                                 saveGroups();
-                                vscode.window.showInformationMessage(`Created group: ${groupName}`);
+                                vscode.window.showInformationMessage(`Created group: ${trimmedName}`);
                                 // Send updated groups back to webview
-                                panel.webview.postMessage({
+                                currentPanel.webview.postMessage({
                                     command: "updateGroups",
                                     groups: groups
                                 });
                             }
                             else {
-                                vscode.window.showWarningMessage(`Group "${groupName}" already exists`);
+                                vscode.window.showWarningMessage(`Group "${trimmedName}" already exists`);
                             }
                         }
                         break;
@@ -120,7 +130,7 @@ function activate(context) {
                             if (groups.length < initialLength) {
                                 saveGroups();
                                 vscode.window.showInformationMessage(`Deleted group: ${message.name}`);
-                                panel.webview.postMessage({
+                                currentPanel.webview.postMessage({
                                     command: "updateGroups",
                                     groups: groups
                                 });
@@ -179,10 +189,14 @@ function activate(context) {
                 vscode.window.showErrorMessage(`Error: ${error}`);
             }
         }, undefined, context.subscriptions);
+        // Clean up when panel is closed
+        currentPanel.onDidDispose(() => {
+            currentPanel = undefined;
+        }, null, context.subscriptions);
     });
     context.subscriptions.push(disposable);
 }
-// Helper functions
+// Helper functions (same as before but ensuring they work)
 function ensureStorageDir(dir) {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
