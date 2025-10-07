@@ -51,19 +51,21 @@ export function activate(context: vscode.ExtensionContext) {
 
     panel.webview.html = html;
 
-    // Initial send of data
-    const data = collectExtensions(panel);
+    // Initial send of data - USE THE CORRECT COMMAND NAME
+    const data = collectExtensions(panel, context);
     panel.webview.postMessage({ command: "loadExtensions", data, groups });
 
     // Message handler from webview
     panel.webview.onDidReceiveMessage(async (msg) => {
       switch (msg.command) {
         case "getExtensions":
-          panel.webview.postMessage({ command: "loadExtensions", data: collectExtensions(panel), groups });
+          panel.webview.postMessage({ command: "loadExtensions", data: collectExtensions(panel, context), groups });
           break;
 
         case "createGroup":
-          if (!groups.find((g) => g.name === msg.name)) groups.push({ name: msg.name, extensions: [] });
+          if (!groups.find((g) => g.name === msg.name)) {
+            groups.push({ name: msg.name, extensions: [] });
+          }
           saveGroups();
           panel.webview.postMessage({ command: "updateGroups", groups });
           break;
@@ -87,15 +89,15 @@ export function activate(context: vscode.ExtensionContext) {
           break;
 
         case "activateGroup":
-          toggleGroup(msg.name, true);
+          await toggleGroup(msg.name, true);
           break;
 
         case "deactivateGroup":
-          toggleGroup(msg.name, false);
+          await toggleGroup(msg.name, false);
           break;
 
         case "backupGroup":
-          backupGroups(panel);
+          backupGroups();
           break;
       }
     });
@@ -129,7 +131,7 @@ function saveGroups() {
   }
 }
 
-function backupGroups(panel: vscode.WebviewPanel) {
+function backupGroups() {
   const backupPath = path.join(
     process.env.USERPROFILE || process.env.HOME || "",
     "extension_groups_backup.json"
@@ -139,9 +141,9 @@ function backupGroups(panel: vscode.WebviewPanel) {
 }
 
 // Gather info on all extensions
-function collectExtensions(panel: vscode.WebviewPanel): ExtensionInfo[] {
+function collectExtensions(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): ExtensionInfo[] {
   const defaultIcon = panel.webview.asWebviewUri(
-    vscode.Uri.joinPath(panel.webview.options.localResourceRoots![0], "default-icon.png")
+    vscode.Uri.joinPath(context.extensionUri, "media", "default-icon.png")
   ).toString();
 
   return vscode.extensions.all.map((ext) => {

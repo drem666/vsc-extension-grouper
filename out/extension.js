@@ -61,18 +61,19 @@ function activate(context) {
         const cssUri = panel.webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, "media", "style.css"));
         html = html.replace(/src="main.js"/g, `src="${jsUri}"`).replace(/href="style.css"/g, `href="${cssUri}"`);
         panel.webview.html = html;
-        // Initial send of data
-        const data = collectExtensions(panel);
+        // Initial send of data - USE THE CORRECT COMMAND NAME
+        const data = collectExtensions(panel, context);
         panel.webview.postMessage({ command: "loadExtensions", data, groups });
         // Message handler from webview
         panel.webview.onDidReceiveMessage(async (msg) => {
             switch (msg.command) {
                 case "getExtensions":
-                    panel.webview.postMessage({ command: "loadExtensions", data: collectExtensions(panel), groups });
+                    panel.webview.postMessage({ command: "loadExtensions", data: collectExtensions(panel, context), groups });
                     break;
                 case "createGroup":
-                    if (!groups.find((g) => g.name === msg.name))
+                    if (!groups.find((g) => g.name === msg.name)) {
                         groups.push({ name: msg.name, extensions: [] });
+                    }
                     saveGroups();
                     panel.webview.postMessage({ command: "updateGroups", groups });
                     break;
@@ -94,13 +95,13 @@ function activate(context) {
                     }
                     break;
                 case "activateGroup":
-                    toggleGroup(msg.name, true);
+                    await toggleGroup(msg.name, true);
                     break;
                 case "deactivateGroup":
-                    toggleGroup(msg.name, false);
+                    await toggleGroup(msg.name, false);
                     break;
                 case "backupGroup":
-                    backupGroups(panel);
+                    backupGroups();
                     break;
             }
         });
@@ -132,14 +133,14 @@ function saveGroups() {
         console.error("Failed to save groups:", err);
     }
 }
-function backupGroups(panel) {
+function backupGroups() {
     const backupPath = path.join(process.env.USERPROFILE || process.env.HOME || "", "extension_groups_backup.json");
     fs.writeFileSync(backupPath, JSON.stringify(groups, null, 2));
     vscode.window.showInformationMessage(`Groups backed up to ${backupPath}`);
 }
 // Gather info on all extensions
-function collectExtensions(panel) {
-    const defaultIcon = panel.webview.asWebviewUri(vscode.Uri.joinPath(panel.webview.options.localResourceRoots[0], "default-icon.png")).toString();
+function collectExtensions(panel, context) {
+    const defaultIcon = panel.webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, "media", "default-icon.png")).toString();
     return vscode.extensions.all.map((ext) => {
         const iconRel = ext.packageJSON.icon
             ? panel.webview.asWebviewUri(vscode.Uri.file(path.join(ext.extensionPath, ext.packageJSON.icon))).toString()
