@@ -3,13 +3,12 @@
   "displayName": "VSCode Extension Grouper",
   "description": "Group, view, and manage your installed VSCode extensions with ease.",
   "version": "1.0.0",
-  "publisher": "your-name",
+  "publisher": "drem666",
   "engines": {
     "vscode": "^1.80.0"
   },
   "activationEvents": [
-    "onStartupFinished",
-    "onCommand:extension-grouper.open"
+    "onStartupFinished"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -27,5 +26,9 @@
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.80.0",
     "typescript": "^5.0.0"
-  }
+  },
+  "extensions.disabled": [
+  "publisher.extensionName",
+  "other.extension.id"
+]
 }
