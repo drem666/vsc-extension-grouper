@@ -4,6 +4,10 @@
   "description": "Group, view, and manage your installed VSCode extensions with ease.",
   "version": "1.0.0",
   "publisher": "drem666",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/drem666/vsc-extension-grouper.git"
+  },
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -21,7 +25,8 @@
     ]
   },
   "scripts": {
-    "compile": "npx tsc -p ./"
+    "compile": "npx tsc -p ./",
+    "package": "npx vsce package"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
