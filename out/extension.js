@@ -268,7 +268,30 @@ function getDisabledExtensions() {
         return [];
     }
 }
-// FIXED: Use correct command names
+// Alternative implementation using configuration API
+async function toggleExtension(extensionId) {
+    try {
+        const config = vscode.workspace.getConfiguration('extensions');
+        const disabledExtensions = config.get('disabled') || [];
+        const isDisabled = disabledExtensions.includes(extensionId);
+        let newDisabledExtensions;
+        if (isDisabled) {
+            // Enable: remove from disabled list
+            newDisabledExtensions = disabledExtensions.filter(id => id !== extensionId);
+            vscode.window.showInformationMessage(`Enabled extension`);
+        }
+        else {
+            // Disable: add to disabled list
+            newDisabledExtensions = [...disabledExtensions, extensionId];
+            vscode.window.showInformationMessage(`Disabled extension`);
+        }
+        await config.update('disabled', newDisabledExtensions, vscode.ConfigurationTarget.Global);
+    }
+    catch (error) {
+        console.error(`Failed to toggle extension ${extensionId}:`, error);
+        vscode.window.showErrorMessage(`Failed to toggle extension: ${error}`);
+    }
+}
 async function activateGroup(groupName) {
     const group = groups.find(g => g.name === groupName);
     if (!group) {
@@ -276,16 +299,11 @@ async function activateGroup(groupName) {
         return;
     }
     try {
-        for (const extensionId of group.extensions) {
-            try {
-                // CORRECT COMMAND: workbench.extensions.enableExtension
-                await vscode.commands.executeCommand('workbench.extensions.enableExtension', extensionId);
-                console.log(`Enabled extension: ${extensionId}`);
-            }
-            catch (error) {
-                console.error(`Failed to enable extension ${extensionId}:`, error);
-            }
-        }
+        const config = vscode.workspace.getConfiguration('extensions');
+        const disabledExtensions = config.get('disabled') || [];
+        // Remove all group extensions from disabled list
+        const newDisabledExtensions = disabledExtensions.filter(id => !group.extensions.includes(id));
+        await config.update('disabled', newDisabledExtensions, vscode.ConfigurationTarget.Global);
         vscode.window.showInformationMessage(`Activated group "${groupName}"`, "Reload Window").then(selection => {
             if (selection === "Reload Window") {
                 vscode.commands.executeCommand("workbench.action.reloadWindow");
@@ -297,7 +315,6 @@ async function activateGroup(groupName) {
         vscode.window.showErrorMessage(`Failed to activate group: ${error}`);
     }
 }
-// FIXED: Use correct command names
 async function deactivateGroup(groupName) {
     const group = groups.find(g => g.name === groupName);
     if (!group) {
@@ -305,16 +322,16 @@ async function deactivateGroup(groupName) {
         return;
     }
     try {
-        for (const extensionId of group.extensions) {
-            try {
-                // CORRECT COMMAND: workbench.extensions.disableExtension
-                await vscode.commands.executeCommand('workbench.extensions.disableExtension', extensionId);
-                console.log(`Disabled extension: ${extensionId}`);
+        const config = vscode.workspace.getConfiguration('extensions');
+        const disabledExtensions = config.get('disabled') || [];
+        // Add all group extensions to disabled list
+        const newDisabledExtensions = [...disabledExtensions];
+        group.extensions.forEach(id => {
+            if (!newDisabledExtensions.includes(id)) {
+                newDisabledExtensions.push(id);
             }
-            catch (error) {
-                console.error(`Failed to disable extension ${extensionId}:`, error);
-            }
-        }
+        });
+        await config.update('disabled', newDisabledExtensions, vscode.ConfigurationTarget.Global);
         vscode.window.showInformationMessage(`Deactivated group "${groupName}"`, "Reload Window").then(selection => {
             if (selection === "Reload Window") {
                 vscode.commands.executeCommand("workbench.action.reloadWindow");
