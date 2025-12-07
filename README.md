@@ -1,59 +1,100 @@
 # VSCode Extension Grouper
 
-Visual tool to create, activate, deactivate, and manage groups of VSCode extensions.
+A visual tool to **group, activate, deactivate, and manage multiple VSCode extensions at once**.  
+Perfect for developers who switch between different workflows, tech stacks, or environments.
 
-## Folder Structure
+---
+
+## ✨ Features
+
+- 📦 Create named groups of extensions  
+- 🗂 Assign and remove extensions from groups  
+- ▶️ Activate a whole group with one click  
+- ⏹ Deactivate a group just as easily  
+- 🔄 Toggle individual extensions  
+- 💾 Automatic persistence (stored in globalStorage)  
+- 🖼 Extension icons display correctly  
+- 🎨 Clean 3-panel UI (Extensions → Groups → Actions)
+
+---
+
+## 📸 Screenshots
+
+### Main UI
+![Screenshot 1](screenshots/VSCode Extension Grouper1.png)
+
+### Group Management
+![Screenshot 2](screenshots/VSCode Extension Grouper2.png)
+
+### Actions & Toggling
+![Screenshot 3](screenshots/VSCode Extension Grouper3.png)
+
+---
+
+## 📁 Folder Structure
+
 vsc-extension-grouper
-├── LICENSE (0.0 B)
-├── README.md (831.0 B)
-├── extensionGroups.json (22.0 B)
-├── package-lock.json (1.8 KB)
-├── package.json (783.0 B)
-├── tsconfig.json (380.0 B)
+├── LICENSE
+├── README.md
+├── extensionGroups.json
+├── package-lock.json
+├── package.json
+├── tsconfig.json
 ├── dist/
-│   ├── extension.js (6.3 KB)
-│   └── extension.js.map (4.4 KB)
+│ ├── extension.js
+│ └── extension.js.map
 ├── media/
-│   ├── default-icon.png (12.3 KB)
-│   ├── main.html (781.0 B)
-│   ├── main.js (2.6 KB)
-│   └── style.css (1.2 KB)
+│ ├── default-icon.png
+│ ├── main.html
+│ ├── main.js
+│ └── style.css
 ├── out/
-│   ├── extension.js (7.4 KB)
-│   └── extension.js.map (5.8 KB)
+│ ├── extension.js
+│ └── extension.js.map
 └── src/
-    └── extension.ts (5.8 KB)
+└── extension.ts
+---
 
-## Running in Development
+## 🧪 Running in Development
 
-1. Open this folder in VSCode.
-2. Run `npm install`.
-3. Press **F5** → launches the Extension Development Host.
-4. In the new window → `Ctrl+Shift+P` → “Open Extension Grouper”.
+1. Clone or open this folder in VS Code  
+2. Run:
 
-## Building for Release
+   ```sh
+   npm install
+3. Press F5 to launch the Extension Development Host
+4. In the new window:
+   Ctrl + Shift + P → “Open Extension Grouper”
 
+📦 Building for Release   
+
+```bash
 npm run compile
 vsce package
+```
+This generates a .vsix file in the project root.
 
+To install the packaged extension manually:
+```bash
+code --install-extension <name>.vsix
+```
 
-This generates a `.vsix` bundle for distribution.
-
-## License
-
-MIT — free and open-source.
-
-🧩 .gitignore
+📝 .gitignore
+```
 node_modules/
 out/
 *.vsix
+```
 
-✅ Final Step — Test
-cd Y:\coder_tools\vsc-extension-grouper
-npm install
-npm run compile
+📜 License
 
+MIT License — free for personal and commercial use.
 
-Then open in VSCode → F5 → Ctrl+Shift+P → Open Extension Grouper.
+❤️ Contributing
 
-You’ll see your 3-panel UI working, icons populating, hover info shown, and full extension list loaded.
+Pull requests are welcome!
+If you find a bug or want a feature, open an issue.
+
+⭐ If you like this extension…
+
+Consider starring the repo on GitHub — it helps others discover it.

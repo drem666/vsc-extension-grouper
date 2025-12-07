@@ -2,372 +2,496 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
 
-interface ExtensionInfo {
-  id: string;
-  displayName: string;
-  description: string;
-  icon: string;
-  active: boolean;
-  groups: string[];
+interface ExtensionGroup {
+    name: string;
+    extensions: string[];
 }
 
-interface Group {
-  name: string;
-  extensions: string[];
-}
-
-let groups: Group[] = [];
+let groups: ExtensionGroup[] = [];
 let groupFilePath: string;
 let currentPanel: vscode.WebviewPanel | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log("Extension Grouper activated.");
+    console.log("Extension Grouper activated.");
 
-  groupFilePath = path.join(context.globalStorageUri.fsPath, "groups.json");
-  ensureStorageDir(context.globalStorageUri.fsPath);
-  loadGroups();
+    groupFilePath = path.join(context.globalStorageUri.fsPath, "groups.json");
+    ensureStorageDir(context.globalStorageUri.fsPath);
+    loadGroups();
 
-  // Status-bar button
-  const button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-  button.text = "$(extensions) Grouper";
-  button.tooltip = "Open Extension Grouper";
-  button.command = "extension-grouper.open";
-  button.show();
-  context.subscriptions.push(button);
+    // Status-bar button
+    const button = vscode.window.createStatusBarItem(
+        vscode.StatusBarAlignment.Left,
+        100
+    );
+    button.text = "$(extensions) Grouper";
+    button.tooltip = "Open Extension Grouper";
+    button.command = "extension-grouper.open";
+    button.show();
+    context.subscriptions.push(button);
 
-  const disposable = vscode.commands.registerCommand("extension-grouper.open", async () => {
-    console.log("Opening Extension Grouper panel");
-    
-    if (currentPanel) {
-      currentPanel.reveal(vscode.ViewColumn.One);
-      return;
-    }
+    const disposable = vscode.commands.registerCommand(
+        "extension-grouper.open",
+        async () => {
+            console.log("Opening Extension Grouper panel");
 
-    currentPanel = vscode.window.createWebviewPanel(
-      "extensionGrouper",
-      "Extension Grouper",
-      vscode.ViewColumn.One,
-      { 
-        enableScripts: true, 
-        retainContextWhenHidden: true,
-        localResourceRoots: [
-          vscode.Uri.joinPath(context.extensionUri, "media")
-        ]
-      }
+            if (currentPanel) {
+                currentPanel.reveal(vscode.ViewColumn.One);
+                return;
+            }
+
+            currentPanel = vscode.window.createWebviewPanel(
+                "extensionGrouper",
+                "Extension Grouper",
+                vscode.ViewColumn.One,
+                {
+                    enableScripts: true,
+                    retainContextWhenHidden: true,
+                    // IMPORTANT: allow all extensions' folders so their icons load
+                    localResourceRoots: [
+                        vscode.Uri.joinPath(context.extensionUri, "media"),
+                        ...vscode.extensions.all.map(ext =>
+                            vscode.Uri.file(ext.extensionPath)
+                        )
+                    ]
+                }
+            );
+
+            const jsUri = currentPanel.webview.asWebviewUri(
+                vscode.Uri.joinPath(context.extensionUri, "media", "main.js")
+            );
+            const cssUri = currentPanel.webview.asWebviewUri(
+                vscode.Uri.joinPath(context.extensionUri, "media", "style.css")
+            );
+            const htmlPath = vscode.Uri.joinPath(
+                context.extensionUri,
+                "media",
+                "main.html"
+            );
+
+            let html = fs.readFileSync(htmlPath.fsPath, "utf8");
+            html = html
+                .replace(/src="main.js"/g, `src="${jsUri}"`)
+                .replace(/href="style.css"/g, `href="${cssUri}"`);
+
+            currentPanel.webview.html = html;
+
+            const extensions = collectExtensions(currentPanel, context);
+            currentPanel.webview.postMessage({
+                command: "loadExtensions",
+                data: extensions,
+                groups
+            });
+
+            currentPanel.webview.onDidReceiveMessage(
+                async (message: any) => {
+                    console.log(
+                        "Extension received message:",
+                        message.command,
+                        message
+                    );
+                    try {
+                        switch (message.command) {
+                            case "getExtensions": {
+                                const updatedExtensions = collectExtensions(
+                                    currentPanel!,
+                                    context
+                                );
+                                currentPanel!.webview.postMessage({
+                                    command: "loadExtensions",
+                                    data: updatedExtensions,
+                                    groups
+                                });
+                                break;
+                            }
+
+                            case "createGroup": {
+                                const groupName =
+                                    await vscode.window.showInputBox({
+                                        prompt:
+                                            "Enter a name for the new group",
+                                        placeHolder: "Group name"
+                                    });
+                                if (groupName && groupName.trim()) {
+                                    const trimmedName = groupName.trim();
+                                    if (
+                                        !groups.find(
+                                            g => g.name === trimmedName
+                                        )
+                                    ) {
+                                        groups.push({
+                                            name: trimmedName,
+                                            extensions: []
+                                        });
+                                        saveGroups();
+                                        vscode.window.showInformationMessage(
+                                            `Created group: ${trimmedName}`
+                                        );
+                                        currentPanel!.webview.postMessage({
+                                            command: "updateGroups",
+                                            groups
+                                        });
+                                    } else {
+                                        vscode.window.showWarningMessage(
+                                            `Group "${trimmedName}" already exists`
+                                        );
+                                    }
+                                }
+                                break;
+                            }
+
+                            case "deleteGroup": {
+                                if (message.name) {
+                                    const initialLength = groups.length;
+                                    groups = groups.filter(
+                                        g => g.name !== message.name
+                                    );
+                                    if (groups.length < initialLength) {
+                                        saveGroups();
+                                        vscode.window.showInformationMessage(
+                                            `Deleted group: ${message.name}`
+                                        );
+                                        currentPanel!.webview.postMessage({
+                                            command: "updateGroups",
+                                            groups
+                                        });
+                                    }
+                                }
+                                break;
+                            }
+
+                            case "assignGroup": {
+                                if (
+                                    message.name &&
+                                    Array.isArray(message.selected)
+                                ) {
+                                    const group = groups.find(
+                                        g => g.name === message.name
+                                    );
+                                    if (group) {
+                                        let addedCount = 0;
+                                        message.selected.forEach(
+                                            (id: string) => {
+                                                if (
+                                                    !group.extensions.includes(
+                                                        id
+                                                    )
+                                                ) {
+                                                    group.extensions.push(id);
+                                                    addedCount++;
+                                                }
+                                            }
+                                        );
+                                        if (addedCount > 0) {
+                                            saveGroups();
+                                            vscode.window.showInformationMessage(
+                                                `Assigned ${addedCount} extensions to ${message.name}`
+                                            );
+                                            currentPanel!.webview.postMessage({
+                                                command: "updateGroups",
+                                                groups
+                                            });
+                                        }
+                                    }
+                                }
+                                break;
+                            }
+
+                            case "deassignGroup": {
+                                if (
+                                    message.name &&
+                                    Array.isArray(message.selected)
+                                ) {
+                                    const group = groups.find(
+                                        g => g.name === message.name
+                                    );
+                                    if (group) {
+                                        const initialLength =
+                                            group.extensions.length;
+                                        group.extensions = group.extensions.filter(
+                                            id =>
+                                                !message.selected.includes(id)
+                                        );
+                                        const removedCount =
+                                            initialLength -
+                                            group.extensions.length;
+                                        if (removedCount > 0) {
+                                            saveGroups();
+                                            vscode.window.showInformationMessage(
+                                                `Removed ${removedCount} extensions from ${message.name}`
+                                            );
+                                            currentPanel!.webview.postMessage({
+                                                command: "updateGroups",
+                                                groups
+                                            });
+                                        }
+                                    }
+                                }
+                                break;
+                            }
+
+                            case "activateGroup": {
+                                if (message.name) {
+                                    await activateGroup(message.name);
+                                }
+                                break;
+                            }
+
+                            case "deactivateGroup": {
+                                if (message.name) {
+                                    await deactivateGroup(message.name);
+                                }
+                                break;
+                            }
+
+                            case "toggleExtension": {
+                                if (message.id) {
+                                    await toggleExtension(message.id);
+                                }
+                                break;
+                            }
+
+                            case "backupGroup": {
+                                backupGroups();
+                                break;
+                            }
+                        }
+                    } catch (error: any) {
+                        console.error("Error handling message:", error);
+                        vscode.window.showErrorMessage(`Error: ${error}`);
+                    }
+                },
+                undefined,
+                context.subscriptions
+            );
+
+            currentPanel.onDidDispose(
+                () => {
+                    currentPanel = undefined;
+                },
+                null,
+                context.subscriptions
+            );
+        }
     );
 
-    const jsUri = currentPanel.webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, "media", "main.js"));
-    const cssUri = currentPanel.webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, "media", "style.css"));
-    
-    const htmlPath = vscode.Uri.joinPath(context.extensionUri, "media", "main.html");
-    let html = fs.readFileSync(htmlPath.fsPath, "utf8");
-    html = html.replace(/src="main.js"/g, `src="${jsUri}"`)
-              .replace(/href="style.css"/g, `href="${cssUri}"`);
-
-    currentPanel.webview.html = html;
-
-    const extensions = collectExtensions(currentPanel, context);
-    currentPanel.webview.postMessage({ 
-      command: "loadExtensions", 
-      data: extensions, 
-      groups: groups 
-    });
-
-    currentPanel.webview.onDidReceiveMessage(async (message) => {
-      console.log("Extension received message:", message.command, message);
-      
-      try {
-        switch (message.command) {
-          case "getExtensions":
-            const updatedExtensions = collectExtensions(currentPanel!, context);
-            currentPanel!.webview.postMessage({ 
-              command: "loadExtensions", 
-              data: updatedExtensions, 
-              groups: groups 
-            });
-            break;
-
-          case "createGroup":
-            const groupName = await vscode.window.showInputBox({
-              prompt: "Enter a name for the new group",
-              placeHolder: "Group name"
-            });
-            
-            if (groupName && groupName.trim()) {
-              const trimmedName = groupName.trim();
-              if (!groups.find(g => g.name === trimmedName)) {
-                groups.push({ name: trimmedName, extensions: [] });
-                saveGroups();
-                vscode.window.showInformationMessage(`Created group: ${trimmedName}`);
-                currentPanel!.webview.postMessage({ command: "updateGroups", groups: groups });
-              } else {
-                vscode.window.showWarningMessage(`Group "${trimmedName}" already exists`);
-              }
-            }
-            break;
-
-          case "deleteGroup":
-            if (message.name) {
-              const initialLength = groups.length;
-              groups = groups.filter(g => g.name !== message.name);
-              if (groups.length < initialLength) {
-                saveGroups();
-                vscode.window.showInformationMessage(`Deleted group: ${message.name}`);
-                currentPanel!.webview.postMessage({ command: "updateGroups", groups: groups });
-              }
-            }
-            break;
-
-          case "assignGroup":
-            if (message.name && Array.isArray(message.selected)) {
-              const group = groups.find(g => g.name === message.name);
-              if (group) {
-                let addedCount = 0;
-                message.selected.forEach((id: string) => {
-                  if (!group.extensions.includes(id)) {
-                    group.extensions.push(id);
-                    addedCount++;
-                  }
-                });
-                if (addedCount > 0) {
-                  saveGroups();
-                  vscode.window.showInformationMessage(`Assigned ${addedCount} extensions to ${message.name}`);
-                  currentPanel!.webview.postMessage({ command: "updateGroups", groups: groups });
-                }
-              }
-            }
-            break;
-
-          case "deassignGroup":
-            if (message.name && Array.isArray(message.selected)) {
-              const group = groups.find(g => g.name === message.name);
-              if (group) {
-                const initialLength = group.extensions.length;
-                group.extensions = group.extensions.filter(id => !message.selected.includes(id));
-                const removedCount = initialLength - group.extensions.length;
-                if (removedCount > 0) {
-                  saveGroups();
-                  vscode.window.showInformationMessage(`Removed ${removedCount} extensions from ${message.name}`);
-                  currentPanel!.webview.postMessage({ command: "updateGroups", groups: groups });
-                }
-              }
-            }
-            break;
-
-          case "activateGroup":
-            if (message.name) {
-              await activateGroup(message.name);
-            }
-            break;
-
-          case "deactivateGroup":
-            if (message.name) {
-              await deactivateGroup(message.name);
-            }
-            break;
-
-          case "toggleExtension":
-            if (message.id) {
-              await toggleExtension(message.id);
-            }
-            break;
-
-          case "backupGroup":
-            backupGroups();
-            break;
-        }
-      } catch (error) {
-        console.error("Error handling message:", error);
-        vscode.window.showErrorMessage(`Error: ${error}`);
-      }
-    }, undefined, context.subscriptions);
-
-    currentPanel.onDidDispose(() => {
-      currentPanel = undefined;
-    }, null, context.subscriptions);
-  });
-
-  context.subscriptions.push(disposable);
+    context.subscriptions.push(disposable);
 }
 
-// Helper functions
+// ---------------- Helper functions ----------------
+
 function ensureStorageDir(dir: string) {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
 }
 
 function loadGroups() {
-  try {
-    if (fs.existsSync(groupFilePath)) {
-      const data = fs.readFileSync(groupFilePath, "utf8");
-      const parsed = JSON.parse(data);
-      groups = parsed.groups || [];
-      console.log(`Loaded ${groups.length} groups from storage`);
-    } else {
-      groups = [];
-      console.log("No existing groups found, starting fresh");
+    try {
+        if (fs.existsSync(groupFilePath)) {
+            const data = fs.readFileSync(groupFilePath, "utf8");
+            const parsed = JSON.parse(data);
+            groups = parsed.groups || [];
+            console.log(`Loaded ${groups.length} groups from storage`);
+        } else {
+            groups = [];
+            console.log("No existing groups found, starting fresh");
+        }
+    } catch (error) {
+        console.error("Error loading groups:", error);
+        groups = [];
     }
-  } catch (error) {
-    console.error("Error loading groups:", error);
-    groups = [];
-  }
 }
 
 function saveGroups() {
-  try {
-    fs.writeFileSync(groupFilePath, JSON.stringify({ groups }, null, 2));
-    console.log(`Saved ${groups.length} groups to storage`);
-  } catch (error) {
-    console.error("Error saving groups:", error);
-    vscode.window.showErrorMessage("Failed to save groups");
-  }
+    try {
+        fs.writeFileSync(
+            groupFilePath,
+            JSON.stringify({ groups }, null, 2),
+            "utf8"
+        );
+        console.log(`Saved ${groups.length} groups to storage`);
+    } catch (error) {
+        console.error("Error saving groups:", error);
+        vscode.window.showErrorMessage("Failed to save groups");
+    }
 }
 
 function backupGroups() {
-  try {
-    const backupPath = path.join(
-      process.env.USERPROFILE || process.env.HOME || "",
-      `extension_groups_backup_${Date.now()}.json`
-    );
-    fs.writeFileSync(backupPath, JSON.stringify({ groups }, null, 2));
-    vscode.window.showInformationMessage(`Groups backed up to: ${backupPath}`);
-  } catch (error) {
-    vscode.window.showErrorMessage(`Backup failed: ${error}`);
-  }
+    try {
+        const backupPath = path.join(
+            process.env.USERPROFILE || process.env.HOME || "",
+            `extension_groups_backup_${Date.now()}.json`
+        );
+        fs.writeFileSync(
+            backupPath,
+            JSON.stringify({ groups }, null, 2),
+            "utf8"
+        );
+        vscode.window.showInformationMessage(
+            `Groups backed up to: ${backupPath}`
+        );
+    } catch (error: any) {
+        vscode.window.showErrorMessage(`Backup failed: ${error}`);
+    }
 }
 
-function collectExtensions(panel: vscode.WebviewPanel, context: vscode.ExtensionContext): ExtensionInfo[] {
-  const defaultIcon = panel.webview.asWebviewUri(
-    vscode.Uri.joinPath(context.extensionUri, "media", "default-icon.png")
-  ).toString();
+function collectExtensions(
+    panel: vscode.WebviewPanel,
+    context: vscode.ExtensionContext
+) {
+    const defaultIcon = panel.webview
+        .asWebviewUri(
+            vscode.Uri.joinPath(
+                context.extensionUri,
+                "media",
+                "default-icon.png"
+            )
+        )
+        .toString();
 
-  const disabledIds = getDisabledExtensions();
+    return vscode.extensions.all.map(ext => {
+        let iconUri = defaultIcon;
 
-  return vscode.extensions.all.map(ext => {
-    let iconUri = defaultIcon;
-    
-    if (ext.packageJSON.icon) {
-      try {
-        const iconPath = path.join(ext.extensionPath, ext.packageJSON.icon);
-        if (fs.existsSync(iconPath)) {
-          iconUri = panel.webview.asWebviewUri(vscode.Uri.file(iconPath)).toString();
+        const pkg: any = ext.packageJSON;
+        if (pkg && pkg.icon) {
+            try {
+                const iconPath = path.join(ext.extensionPath, pkg.icon);
+                if (fs.existsSync(iconPath)) {
+                    iconUri = panel.webview
+                        .asWebviewUri(vscode.Uri.file(iconPath))
+                        .toString();
+                }
+            } catch (error) {
+                console.log(`Could not load icon for ${ext.id}:`, error);
+            }
         }
-      } catch (error) {
-        console.log(`Could not load icon for ${ext.id}:`, error);
-      }
-    }
 
-    const extensionGroups = groups
-      .filter(group => group.extensions.includes(ext.id))
-      .map(group => group.name);
+        const extensionGroups = groups
+            .filter(group => group.extensions.includes(ext.id))
+            .map(group => group.name);
 
-    return {
-      id: ext.id,
-      displayName: ext.packageJSON.displayName || ext.id,
-      description: ext.packageJSON.description || "No description available",
-      icon: iconUri,
-      active: !disabledIds.includes(ext.id),
-      groups: extensionGroups
-    };
-  });
-}
-
-function getDisabledExtensions(): string[] {
-  try {
-    const config = vscode.workspace.getConfiguration('extensions');
-    return config.get<string[]>('disabled') || [];
-  } catch (error) {
-    console.error("Error getting disabled extensions:", error);
-    return [];
-  }
-}
-
-// FIXED: Use correct command names
-async function activateGroup(groupName: string) {
-  const group = groups.find(g => g.name === groupName);
-  if (!group) {
-    vscode.window.showErrorMessage(`Group "${groupName}" not found`);
-    return;
-  }
-
-  try {
-    for (const extensionId of group.extensions) {
-      try {
-        // CORRECT COMMAND: workbench.extensions.enableExtension
-        await vscode.commands.executeCommand('workbench.extensions.enableExtension', extensionId);
-        console.log(`Enabled extension: ${extensionId}`);
-      } catch (error) {
-        console.error(`Failed to enable extension ${extensionId}:`, error);
-      }
-    }
-    
-    vscode.window.showInformationMessage(
-      `Activated group "${groupName}"`,
-      "Reload Window"
-    ).then(selection => {
-      if (selection === "Reload Window") {
-        vscode.commands.executeCommand("workbench.action.reloadWindow");
-      }
+        return {
+            id: ext.id,
+            displayName: pkg.displayName || ext.id,
+            description: pkg.description || "No description available",
+            icon: iconUri,
+            // NOTE: ext.isActive indicates if the extension is currently activated,
+            // not just "enabled", but it's the best runtime indicator available.
+            active: ext.isActive,
+            groups: extensionGroups
+        };
     });
-  } catch (error) {
-    console.error("Error in activateGroup:", error);
-    vscode.window.showErrorMessage(`Failed to activate group: ${error}`);
-  }
 }
 
-// FIXED: Use correct command names
-async function deactivateGroup(groupName: string) {
-  const group = groups.find(g => g.name === groupName);
-  if (!group) {
-    vscode.window.showErrorMessage(`Group "${groupName}" not found`);
-    return;
-  }
+// ------------- Enable / Disable Logic (GLOBAL) -------------
 
-  try {
-    for (const extensionId of group.extensions) {
-      try {
-        // CORRECT COMMAND: workbench.extensions.disableExtension
-        await vscode.commands.executeCommand('workbench.extensions.disableExtension', extensionId);
-        console.log(`Disabled extension: ${extensionId}`);
-      } catch (error) {
-        console.error(`Failed to disable extension ${extensionId}:`, error);
-      }
-    }
-    
-    vscode.window.showInformationMessage(
-      `Deactivated group "${groupName}"`,
-      "Reload Window"
-    ).then(selection => {
-      if (selection === "Reload Window") {
-        vscode.commands.executeCommand("workbench.action.reloadWindow");
-      }
-    });
-  } catch (error) {
-    console.error("Error in deactivateGroup:", error);
-    vscode.window.showErrorMessage(`Failed to deactivate group: ${error}`);
-  }
-}
-
-// FIXED: Use correct command names
 async function toggleExtension(extensionId: string) {
-  try {
-    const disabledIds = getDisabledExtensions();
-    const isDisabled = disabledIds.includes(extensionId);
+    try {
+        const ext = vscode.extensions.getExtension(extensionId);
+        if (!ext) {
+            vscode.window.showErrorMessage(
+                `Extension not found: ${extensionId}`
+            );
+            return;
+        }
 
-    if (isDisabled) {
-      // CORRECT COMMAND: workbench.extensions.enableExtension
-      await vscode.commands.executeCommand('workbench.extensions.enableExtension', extensionId);
-      vscode.window.showInformationMessage(`Enabled extension`);
-    } else {
-      // CORRECT COMMAND: workbench.extensions.disableExtension
-      await vscode.commands.executeCommand('workbench.extensions.disableExtension', extensionId);
-      vscode.window.showInformationMessage(`Disabled extension`);
+        if (ext.isActive) {
+            // Disable (Always) – global
+            await vscode.commands.executeCommand(
+                "workbench.extensions.action.disableExtension",
+                extensionId
+            );
+            vscode.window.showInformationMessage(
+                `Disabled extension: ${extensionId}`
+            );
+        } else {
+            // Enable (Always) – global
+            await vscode.commands.executeCommand(
+                "workbench.extensions.action.enableExtension",
+                extensionId
+            );
+            vscode.window.showInformationMessage(
+                `Enabled extension: ${extensionId}`
+            );
+        }
+    } catch (error: any) {
+        console.error(`Failed to toggle extension ${extensionId}:`, error);
+        vscode.window.showErrorMessage(
+            `Failed to toggle extension: ${error.message || error}`
+        );
     }
-  } catch (error) {
-    console.error(`Failed to toggle extension ${extensionId}:`, error);
-    vscode.window.showErrorMessage(`Failed to toggle extension: ${error}`);
-  }
 }
 
-export function deactivate() {}
+async function activateGroup(groupName: string) {
+    const group = groups.find(g => g.name === groupName);
+    if (!group) {
+        vscode.window.showErrorMessage(`Group "${groupName}" not found`);
+        return;
+    }
+
+    try {
+        for (const id of group.extensions) {
+            await vscode.commands.executeCommand(
+                "workbench.extensions.action.enableExtension",
+                id
+            );
+        }
+
+        vscode.window
+            .showInformationMessage(
+                `Activated group "${groupName}"`,
+                "Reload Window"
+            )
+            .then(selection => {
+                if (selection === "Reload Window") {
+                    vscode.commands.executeCommand(
+                        "workbench.action.reloadWindow"
+                    );
+                }
+            });
+    } catch (error: any) {
+        console.error("Error in activateGroup:", error);
+        vscode.window.showErrorMessage(
+            `Failed to activate group: ${error.message || error}`
+        );
+    }
+}
+
+async function deactivateGroup(groupName: string) {
+    const group = groups.find(g => g.name === groupName);
+    if (!group) {
+        vscode.window.showErrorMessage(`Group "${groupName}" not found`);
+        return;
+    }
+
+    try {
+        for (const id of group.extensions) {
+            await vscode.commands.executeCommand(
+                "workbench.extensions.action.disableExtension",
+                id
+            );
+        }
+
+        vscode.window
+            .showInformationMessage(
+                `Deactivated group "${groupName}"`,
+                "Reload Window"
+            )
+            .then(selection => {
+                if (selection === "Reload Window") {
+                    vscode.commands.executeCommand(
+                        "workbench.action.reloadWindow"
+                    );
+                }
+            });
+    } catch (error: any) {
+        console.error("Error in deactivateGroup:", error);
+        vscode.window.showErrorMessage(
+            `Failed to deactivate group: ${error.message || error}`
+        );
+    }
+}
+
+export function deactivate() {
+    // Nothing special for now
+}
