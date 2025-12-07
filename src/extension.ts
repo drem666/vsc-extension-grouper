@@ -46,7 +46,6 @@ export function activate(context: vscode.ExtensionContext) {
                 {
                     enableScripts: true,
                     retainContextWhenHidden: true,
-                    // IMPORTANT: allow all extensions' folders so their icons load
                     localResourceRoots: [
                         vscode.Uri.joinPath(context.extensionUri, "media"),
                         ...vscode.extensions.all.map(ext =>
@@ -84,11 +83,6 @@ export function activate(context: vscode.ExtensionContext) {
 
             currentPanel.webview.onDidReceiveMessage(
                 async (message: any) => {
-                    console.log(
-                        "Extension received message:",
-                        message.command,
-                        message
-                    );
                     try {
                         switch (message.command) {
                             case "getExtensions": {
@@ -256,7 +250,6 @@ export function activate(context: vscode.ExtensionContext) {
                             }
                         }
                     } catch (error: any) {
-                        console.error("Error handling message:", error);
                         vscode.window.showErrorMessage(`Error: ${error}`);
                     }
                 },
@@ -277,7 +270,9 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(disposable);
 }
 
-// ---------------- Helper functions ----------------
+// --------------------------------------------------------
+// DATA STORAGE HELPERS
+// --------------------------------------------------------
 
 function ensureStorageDir(dir: string) {
     if (!fs.existsSync(dir)) {
@@ -291,13 +286,10 @@ function loadGroups() {
             const data = fs.readFileSync(groupFilePath, "utf8");
             const parsed = JSON.parse(data);
             groups = parsed.groups || [];
-            console.log(`Loaded ${groups.length} groups from storage`);
         } else {
             groups = [];
-            console.log("No existing groups found, starting fresh");
         }
-    } catch (error) {
-        console.error("Error loading groups:", error);
+    } catch {
         groups = [];
     }
 }
@@ -309,9 +301,7 @@ function saveGroups() {
             JSON.stringify({ groups }, null, 2),
             "utf8"
         );
-        console.log(`Saved ${groups.length} groups to storage`);
-    } catch (error) {
-        console.error("Error saving groups:", error);
+    } catch {
         vscode.window.showErrorMessage("Failed to save groups");
     }
 }
@@ -335,6 +325,10 @@ function backupGroups() {
     }
 }
 
+// --------------------------------------------------------
+// EXTENSION DATA COLLECTION
+// --------------------------------------------------------
+
 function collectExtensions(
     panel: vscode.WebviewPanel,
     context: vscode.ExtensionContext
@@ -351,9 +345,9 @@ function collectExtensions(
 
     return vscode.extensions.all.map(ext => {
         let iconUri = defaultIcon;
-
         const pkg: any = ext.packageJSON;
-        if (pkg && pkg.icon) {
+
+        if (pkg?.icon) {
             try {
                 const iconPath = path.join(ext.extensionPath, pkg.icon);
                 if (fs.existsSync(iconPath)) {
@@ -361,9 +355,7 @@ function collectExtensions(
                         .asWebviewUri(vscode.Uri.file(iconPath))
                         .toString();
                 }
-            } catch (error) {
-                console.log(`Could not load icon for ${ext.id}:`, error);
-            }
+            } catch {}
         }
 
         const extensionGroups = groups
@@ -375,51 +367,54 @@ function collectExtensions(
             displayName: pkg.displayName || ext.id,
             description: pkg.description || "No description available",
             icon: iconUri,
-            // NOTE: ext.isActive indicates if the extension is currently activated,
-            // not just "enabled", but it's the best runtime indicator available.
             active: ext.isActive,
             groups: extensionGroups
         };
     });
 }
 
-// ------------- Enable / Disable Logic (GLOBAL) -------------
+// --------------------------------------------------------
+// PRESENT COMMANDS TO USER
+// --------------------------------------------------------
 
-async function toggleExtension(extensionId: string) {
-    try {
-        const ext = vscode.extensions.getExtension(extensionId);
-        if (!ext) {
-            vscode.window.showErrorMessage(
-                `Extension not found: ${extensionId}`
-            );
-            return;
-        }
+async function offerCommandActions(title: string, commands: string) {
+    const choice = await vscode.window.showInformationMessage(
+        title,
+        "Copy to Clipboard",
+        "Show Commands",
+        "Cancel"
+    );
 
-        if (ext.isActive) {
-            // Disable (Always) – global
-            await vscode.commands.executeCommand(
-                "workbench.extensions.action.disableExtension",
-                extensionId
-            );
-            vscode.window.showInformationMessage(
-                `Disabled extension: ${extensionId}`
-            );
-        } else {
-            // Enable (Always) – global
-            await vscode.commands.executeCommand(
-                "workbench.extensions.action.enableExtension",
-                extensionId
-            );
-            vscode.window.showInformationMessage(
-                `Enabled extension: ${extensionId}`
-            );
-        }
-    } catch (error: any) {
-        console.error(`Failed to toggle extension ${extensionId}:`, error);
-        vscode.window.showErrorMessage(
-            `Failed to toggle extension: ${error.message || error}`
+    if (choice === "Copy to Clipboard") {
+        await vscode.env.clipboard.writeText(commands);
+        vscode.window.showInformationMessage("Commands copied to clipboard.");
+    } else if (choice === "Show Commands") {
+        vscode.window.showInformationMessage(
+            "Commands:",
+            { modal: true, detail: commands }
         );
     }
+}
+
+// --------------------------------------------------------
+// ACTION LOGIC (NOW: GENERATE COMMANDS)
+// --------------------------------------------------------
+
+async function toggleExtension(extensionId: string) {
+    const ext = vscode.extensions.getExtension(extensionId);
+    if (!ext) {
+        vscode.window.showErrorMessage(`Extension not found: ${extensionId}`);
+        return;
+    }
+
+    const cmd = ext.isActive
+        ? `code --disable-extension ${extensionId}`
+        : `code --enable-extension ${extensionId}`;
+
+    await offerCommandActions(
+        `${ext.isActive ? "Disable" : "Enable"} Extension`,
+        cmd
+    );
 }
 
 async function activateGroup(groupName: string) {
@@ -429,32 +424,14 @@ async function activateGroup(groupName: string) {
         return;
     }
 
-    try {
-        for (const id of group.extensions) {
-            await vscode.commands.executeCommand(
-                "workbench.extensions.action.enableExtension",
-                id
-            );
-        }
+    const commands = group.extensions
+        .map(id => `code --enable-extension ${id}`)
+        .join("\n");
 
-        vscode.window
-            .showInformationMessage(
-                `Activated group "${groupName}"`,
-                "Reload Window"
-            )
-            .then(selection => {
-                if (selection === "Reload Window") {
-                    vscode.commands.executeCommand(
-                        "workbench.action.reloadWindow"
-                    );
-                }
-            });
-    } catch (error: any) {
-        console.error("Error in activateGroup:", error);
-        vscode.window.showErrorMessage(
-            `Failed to activate group: ${error.message || error}`
-        );
-    }
+    await offerCommandActions(
+        `Enable all extensions in group "${groupName}"`,
+        commands
+    );
 }
 
 async function deactivateGroup(groupName: string) {
@@ -464,34 +441,14 @@ async function deactivateGroup(groupName: string) {
         return;
     }
 
-    try {
-        for (const id of group.extensions) {
-            await vscode.commands.executeCommand(
-                "workbench.extensions.action.disableExtension",
-                id
-            );
-        }
+    const commands = group.extensions
+        .map(id => `code --disable-extension ${id}`)
+        .join("\n");
 
-        vscode.window
-            .showInformationMessage(
-                `Deactivated group "${groupName}"`,
-                "Reload Window"
-            )
-            .then(selection => {
-                if (selection === "Reload Window") {
-                    vscode.commands.executeCommand(
-                        "workbench.action.reloadWindow"
-                    );
-                }
-            });
-    } catch (error: any) {
-        console.error("Error in deactivateGroup:", error);
-        vscode.window.showErrorMessage(
-            `Failed to deactivate group: ${error.message || error}`
-        );
-    }
+    await offerCommandActions(
+        `Disable all extensions in group "${groupName}"`,
+        commands
+    );
 }
 
-export function deactivate() {
-    // Nothing special for now
-}
+export function deactivate() {}
