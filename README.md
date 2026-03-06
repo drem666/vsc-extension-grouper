@@ -17,6 +17,19 @@ Perfect for developers who switch between different workflows, tech stacks, or e
 - 🎨 Clean 3-panel UI (Extensions → Groups → Actions)
 
 ---
+## Known Issue & Workaround
+
+Microsoft has disabled API calls for enabling/disabling extension, Activation is impossible by clicking extension icon directly. Workaround: display code to manually install/enable. Unfortunately, I learnt about this way later during development (The idea works for browser extensions. I will release the ExtensionGrouper for Chrome in some time)
+
+There are better extensions: 
+
+"toolshive.vscode-quick-extension-manager"
+
+"hayden.extension-pack-manager" 
+
+"bloodycrown.simple-extension-manager"
+
+So much for working a visually effective extension that does everything but what is required. 🤦🏽‍♂😅
 
 ## 📸 Screenshots
 
