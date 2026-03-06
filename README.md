@@ -21,18 +21,19 @@ Perfect for developers who switch between different workflows, tech stacks, or e
 ## 📸 Screenshots
 
 ### Main UI
-![Screenshot 1](screenshots/VSCode Extension Grouper1.png)
+![Screenshot 1](screenshots/VSCode_Extension_Grouper1.png)
 
 ### Group Management
-![Screenshot 2](screenshots/VSCode Extension Grouper2.png)
+![Screenshot 2](screenshots/VSCode_Extension_Grouper2.png)
 
 ### Actions & Toggling
-![Screenshot 3](screenshots/VSCode Extension Grouper3.png)
+![Screenshot 3](screenshots/VSCode_Extension_Grouper3.png)
 
 ---
 
 ## 📁 Folder Structure
 
+```ini
 vsc-extension-grouper
 ├── LICENSE
 ├── README.md
@@ -53,6 +54,7 @@ vsc-extension-grouper
 │ └── extension.js.map
 └── src/
 └── extension.ts
+```
 ---
 
 ## 🧪 Running in Development
