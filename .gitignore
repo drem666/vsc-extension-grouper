@@ -1,12 +1,9 @@
 # Create .gitignore file in each repository
 # Custom folders/files
-GPT-INFO/
 tests/
-/config/letsencrypt/*
 DRAFTS
-Drafts
 INFO
-Info
+*.vsix
 # Python
 __pycache__/
 *.py[cod]
